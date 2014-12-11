@@ -1,43 +1,94 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.ServiceModel;
+using System.Xml;
 
 namespace AppDomainService
 {
-    public abstract class AppDomainPortal<TRequest, TResult> : MarshalByRefObject 
+    public class AppDomainPortal<TContract, TService> : MarshalByRefObject
     {
-        protected Assembly Assembly { get; private set; }
+        private static ServiceHost Host;
+        private static object SyncLock = new object();
+
+        static AppDomainPortal()
+        {
+            AppDomain.CurrentDomain.DomainUnload += AppDomain_OnDomainUnload;
+        }
 
         public override object InitializeLifetimeService() { return null; }
 
-        protected abstract void OnAssemblyLoaded();
-        protected abstract TResult Execute(TRequest request);
-
-        internal void Load(byte[] bytes)
+        internal void LoadFrom(string plugInPath)
         {
-            if (Assembly != null)
-                throw new InvalidOperationException("AppDomainPortal can only be loaded once.");
+            if (plugInPath == null)
+                throw new ArgumentNullException("plugInPath");
 
-            Assembly = Assembly.Load(bytes);
 
-            OnAssemblyLoaded();
+            foreach (var fileInfo in Directory.GetFiles(plugInPath)
+                                              .Select(x => new FileInfo(x))
+                                              .Where(x => string.Equals(x.Extension, ".dll", StringComparison.OrdinalIgnoreCase)))
+            {
+                Assembly.LoadFrom(fileInfo.FullName);
+            }
         }
 
-        internal void LoadFile(string path)
+        internal void Start()
         {
-            if (Assembly != null)
-                throw new InvalidOperationException("AppDomainPortal can only be loaded once.");
+            lock (SyncLock)
+            {
+                if (Host != null)
+                    throw new AppDomainServiceException("WcfSelfHost Service is already started");
 
-            Assembly = Assembly.LoadFile(path);
-
-            OnAssemblyLoaded();
+                Host = GetServiceHost();
+                Host.Open();
+            }
         }
 
-        internal TResult InternalExecute(TRequest request)
+        protected virtual ServiceHost GetServiceHost()
         {
-            if (Assembly == null)
-                throw new InvalidOperationException("AppDomainPortal must call Load before any other operation.");
+            var host = new ServiceHost(typeof(TService), new Uri("net.pipe://localhost"));
 
-            return Execute(request);
+            host.AddServiceEndpoint(typeof(TContract),
+                new NetNamedPipeBinding
+                {
+                    ReceiveTimeout = TimeSpan.FromMinutes(10),
+                    SendTimeout = TimeSpan.FromMinutes(10),
+                    MaxBufferSize = int.MaxValue,
+                    MaxBufferPoolSize = int.MaxValue,
+                    MaxReceivedMessageSize = int.MaxValue,
+                    ReaderQuotas = new XmlDictionaryReaderQuotas
+                    {
+                        MaxDepth = int.MaxValue,
+                        MaxStringContentLength = int.MaxValue,
+                        MaxArrayLength = int.MaxValue,
+                        MaxBytesPerRead = int.MaxValue,
+                        MaxNameTableCharCount = int.MaxValue
+                    },
+                    Security = new NetNamedPipeSecurity
+                    {
+                        Mode = NetNamedPipeSecurityMode.None
+                    }
+                },
+                string.Format("{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName));
+
+            return host;
+        }
+
+        private static void AppDomain_OnDomainUnload(object sender, EventArgs args)
+        {
+            try
+            {
+                if (Host != null)
+                    Host.Close();
+            }
+            catch (Exception)
+            {
+                if (Host != null)
+                    Host.Abort();
+
+                throw;
+            }
         }
     }
 }

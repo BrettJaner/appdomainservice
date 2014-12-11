@@ -1,89 +1,99 @@
 ﻿using System;
-using System.Configuration;
-using System.IO;
+using System.Collections.Concurrent;
+using System.ServiceModel;
 using System.Threading;
+using System.Xml;
 
 namespace AppDomainService
 {
-    public abstract class AppDomainProxy<TPortal, TRequest, TResult>
-        where TPortal : AppDomainPortal<TRequest, TResult>
+    public class AppDomainProxy<TContract, TService>
+        where TService : TContract
     {
-        static AppDomainProxy()
+        private static readonly ConcurrentDictionary<Type, AppDomain> AppDomainsByTypes = new ConcurrentDictionary<Type, AppDomain>();
+
+        private readonly string _plugInPath;
+
+        protected virtual Type AppDomainPortalType { get { return typeof(AppDomainPortal<TContract, TService>); } }
+
+        public AppDomainProxy() { }
+
+        protected AppDomainProxy(string plugInPath)
         {
-            string appConfig = ConfigurationManager.AppSettings["AppDomainIsolationLevel"] ?? "IsolatedAppDomain";
-
-            var appDomainIsolationLevel = (AppDomainIsolationLevels)Enum.Parse(typeof(AppDomainIsolationLevels), appConfig);
-
-            switch (appDomainIsolationLevel)
-            {
-                case AppDomainIsolationLevels.IsolatedAppDomain:
-                    _protocol = new IsolatedCommunicationProtocol();
-                    break;
-
-                case AppDomainIsolationLevels.CurrentAppDomain:
-                    _protocol = new LocalCommunicationProtocol();
-                    break;
-
-                default:
-                    throw new InvalidOperationException("Isolation Level is not associated with a Protocol.");
-            }
+            _plugInPath = plugInPath;
         }
 
-        private enum AppDomainIsolationLevels
+        public void Reset()
         {
-            IsolatedAppDomain,
-            CurrentAppDomain
+            AppDomain domain;
+
+            if (AppDomainsByTypes.TryRemove(GetType(), out domain))
+                AppDomain.Unload(domain);
         }
 
-        private static readonly ICommunicationProtocol _protocol;
-
-        private static readonly object _padLock = new object();
-        private static TPortal _portal;
-
-        protected internal abstract string DynamicallyLoadedAssemblyPath { get; }
-
-        public bool IsPortalRemote { get { return _protocol.IsPortalRemote; } }
-
-        public TResult ExecuteRequest(TRequest dto)
+        public ChannelFactory<TContract> CreateChannelFactory()
         {
-            var portal = GetPortal();
+            StartUpServiceIfDown();
 
-            return portal.InternalExecute(dto);
+            return InitializeChannelFactory();
         }
 
-        private TPortal GetPortal()
+        protected virtual ChannelFactory<TContract> InitializeChannelFactory()
         {
-            if (_portal == null)
-            {
-                lock (_padLock)
+            return new ChannelFactory<TContract>(
+                new NetNamedPipeBinding
                 {
-                    if (_portal == null)
+                    ReceiveTimeout = TimeSpan.FromMinutes(10),
+                    SendTimeout = TimeSpan.FromMinutes(10),
+                    MaxBufferSize = int.MaxValue,
+                    MaxBufferPoolSize = int.MaxValue,
+                    MaxReceivedMessageSize = int.MaxValue,
+                    ReaderQuotas = new XmlDictionaryReaderQuotas
                     {
-                        var assemblyBytes = GetAssemblyBytes();
-
-                        _portal = _protocol.GetPortal<TPortal, TRequest, TResult>(DynamicallyLoadedAssemblyPath, assemblyBytes);
+                        MaxDepth = int.MaxValue,
+                        MaxStringContentLength = int.MaxValue,
+                        MaxArrayLength = int.MaxValue,
+                        MaxBytesPerRead = int.MaxValue,
+                        MaxNameTableCharCount = int.MaxValue
+                    },
+                    Security = new NetNamedPipeSecurity
+                    {
+                        Mode = NetNamedPipeSecurityMode.None
                     }
-                }
-            }
-
-            return _portal;
+                }, new EndpointAddress(string.Format("net.pipe://localhost/{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName)));
         }
 
-        public void InvalidateAppDomain()
+        private void StartUpServiceIfDown()
         {
-            lock (_padLock)
+            AppDomainsByTypes.GetOrAdd(GetType(), type =>
             {
-                _portal = null;
-                _protocol.Reset();
-            }
+                var domain = AppDomain.CreateDomain(Guid.NewGuid().ToString(),
+                    AppDomain.CurrentDomain.Evidence,
+                    new AppDomainSetup
+                    {
+                        ShadowCopyDirectories = _plugInPath,
+                        ShadowCopyFiles = "true",
+                    });
+
+                domain.UnhandledException += AppDomain_UnhandledException;
+                domain.SetThreadPrincipal(Thread.CurrentPrincipal);
+
+                var host = (AppDomainPortal<TContract, TService>)domain.CreateInstanceAndUnwrap(AppDomainPortalType.Assembly.FullName, AppDomainPortalType.FullName);
+                host.LoadFrom(_plugInPath);
+
+                host.Start();
+
+                return domain;
+            });
         }
 
-        private byte[] GetAssemblyBytes()
+        private static void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs args)
         {
-            if (!File.Exists(DynamicallyLoadedAssemblyPath))
-                throw new InvalidOperationException(string.Format("Dynamically Loaded Assembly does not exist ({0})", DynamicallyLoadedAssemblyPath));
+            var exception = args.ExceptionObject as Exception;
 
-            return File.ReadAllBytes(DynamicallyLoadedAssemblyPath);
+            if (exception != null)
+                throw new AppDomainServiceException("Exception happened in another AppDomain.  Please see inner exception.", exception);
+
+            throw new AppDomainServiceException(string.Format("Exception happened in another AppDomain:  {0}", args.ExceptionObject));
         }
     }
 }

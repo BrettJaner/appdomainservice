@@ -1,33 +1,31 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using AppDomainService;
 
 namespace MyTestApplication
 {
-    public class StringOperationPortal : AppDomainPortal<StringOperationRequest, StringOperationResult>
+    public class StringOperationPortal : IStringOperationPortal
     {
-        private Dictionary<string, IStringOperation> _cache = new Dictionary<string, IStringOperation>();
+        private static readonly Dictionary<string, IStringOperation> _cache = new Dictionary<string, IStringOperation>();
 
-        protected override void OnAssemblyLoaded()
+        static StringOperationPortal()
         {
-            _cache = Assembly.GetTypes()
+            _cache = AppDomain.CurrentDomain.GetAssemblies()
+                            .SelectMany(asm => asm.GetExportedTypes())
                             .Where(t => !t.IsAbstract)
                             .Where(t => typeof(IStringOperation).IsAssignableFrom(t))
-                            .Select(x => (IStringOperation)Assembly.CreateInstance(x.FullName))
+                            .Select(t => (IStringOperation)t.Assembly.CreateInstance(t.FullName))
                             .ToDictionary(x => x.OperationCode);
         }
 
-        protected override StringOperationResult Execute(StringOperationRequest request)
+        public string Execute(string operationCode, string input)
         {
-            if (!_cache.ContainsKey(request.OperationCode))
-                throw new InvalidOperationException(string.Format("StringOperation Type does not exist for OperationCode={0}", request.OperationCode));
+            if (!_cache.ContainsKey(operationCode))
+                throw new InvalidOperationException(string.Format("StringOperation Type does not exist for OperationCode={0}", operationCode));
 
-            var operation = _cache[request.OperationCode];
+            var operation = _cache[operationCode];
 
-            string result = operation.DoWork(request.Input);
-
-            return new StringOperationResult(result);
+            return operation.DoWork(input);
         }
     }
 }

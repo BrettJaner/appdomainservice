@@ -7,26 +7,32 @@ namespace MyTestApplication
     {
         static void Main(string[] args)
         {
-            var proxy = new StringOperationProxy();
+            var proxy = new StringAppProxy();
+            using (var channelFactory = proxy.CreateChannelFactory())
+            {
+                var portal = channelFactory.CreateChannel();
 
-            var result1 = proxy.ExecuteRequest(new StringOperationRequest("REVERSE", "PleaseReverseMe"));
+                string result = portal.Execute("REVERSE", "PleaseReverseMe");
 
-            Console.WriteLine(string.Format("REVERSE Operation{0}", Environment.NewLine));
-            Console.WriteLine(string.Format("Request = {0}", "PleaseReverseMe"));
-            Console.WriteLine(string.Format("Result = {0}", result1.Result));
-            Console.WriteLine();
+                Console.WriteLine(string.Format("REVERSE Operation{0}", Environment.NewLine));
+                Console.WriteLine(string.Format("Request = {0}", "PleaseReverseMe"));
+                Console.WriteLine(string.Format("Result = {0}", result));
+                Console.WriteLine();
 
-            var result2 = proxy.ExecuteRequest(new StringOperationRequest("CONCAT", "PleaseConcatMe"));
+                result = portal.Execute("CONCAT", "PleaseConcatMe");
 
-            Console.WriteLine(string.Format("CONCAT Operation{0}", Environment.NewLine));
-            Console.WriteLine(string.Format("Request = {0}", "PleaseConcatMe"));
-            Console.WriteLine(string.Format("Result = {0}", result2.Result));
-            Console.WriteLine();
+                Console.WriteLine(string.Format("CONCAT Operation{0}", Environment.NewLine));
+                Console.WriteLine(string.Format("Request = {0}", "PleaseConcatMe"));
+                Console.WriteLine(string.Format("Result = {0}", result));
+                Console.WriteLine();
+            }
 
             Console.WriteLine(string.Format("Assemblies loaded in main AppDomain{0}", Environment.NewLine));
 
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                Console.WriteLine(asm.ManifestModule.Name);
+            foreach (var asmName in AppDomain.CurrentDomain.GetAssemblies().Select(x => x.ManifestModule.Name).OrderBy(x => x))
+                Console.WriteLine(asmName);
+
+            proxy.Reset();
         }
     }
 }

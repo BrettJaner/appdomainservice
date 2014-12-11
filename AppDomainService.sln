@@ -1,6 +1,8 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
+# Visual Studio 2013
+VisualStudioVersion = 12.0.30501.0
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AppDomainService", "AppDomainService\AppDomainService.csproj", "{3AB79CF8-65C2-4B7C-8150-1EB787B01110}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyTestApplication", "MyTestApplication\MyTestApplication.csproj", "{176296DF-9F3C-4D16-AD44-0A5D7FA96F6C}"
