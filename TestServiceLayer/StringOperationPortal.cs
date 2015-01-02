@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace MyTestApplication
+namespace TestServiceLayer
 {
     public class StringOperationPortal : IStringOperationPortal
     {

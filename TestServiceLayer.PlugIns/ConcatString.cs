@@ -1,6 +1,4 @@
-﻿using MyTestApplication;
-
-namespace DynamicallyLoadedAssembly
+﻿namespace TestServiceLayer.PlugIns
 {
     public class ConcatString : IStringOperation
     {

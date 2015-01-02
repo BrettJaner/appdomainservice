@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.ServiceModel;
+using System.ServiceModel.Description;
 using System.Xml;
 
 namespace AppDomainService
@@ -71,6 +72,13 @@ namespace AppDomainService
                     }
                 },
                 string.Format("{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName));
+
+            var debugBehavior = host.Description.Behaviors.OfType<ServiceDebugBehavior>().SingleOrDefault();
+
+            if (debugBehavior != null)
+                debugBehavior.IncludeExceptionDetailInFaults = true;
+            else
+                host.Description.Behaviors.Add(new ServiceDebugBehavior { IncludeExceptionDetailInFaults = true });
 
             return host;
         }

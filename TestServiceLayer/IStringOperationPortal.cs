@@ -1,6 +1,6 @@
 ﻿using System.ServiceModel;
 
-namespace MyTestApplication
+namespace TestServiceLayer
 {
     [ServiceContract]
     public interface IStringOperationPortal

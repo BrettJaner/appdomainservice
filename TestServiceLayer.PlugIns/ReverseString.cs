@@ -1,7 +1,6 @@
 ﻿using System.Linq;
-using MyTestApplication;
 
-namespace DynamicallyLoadedAssembly
+namespace TestServiceLayer.PlugIns
 {
     public class ReverseString : IStringOperation
     {

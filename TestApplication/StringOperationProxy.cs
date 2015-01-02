@@ -1,9 +1,10 @@
 ﻿using AppDomainService;
+using TestServiceLayer;
 
-namespace MyTestApplication
+namespace TestApplication
 {
     public class StringAppProxy : AppDomainProxy<IStringOperationPortal, StringOperationPortal>
     {
-        public StringAppProxy() : base(@"c:\temp\hotswap\") { }
+        public StringAppProxy() : base(@"c:\temp\plugin\") { }
     }
 }

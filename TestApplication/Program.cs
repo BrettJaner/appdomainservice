@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 
-namespace MyTestApplication
+namespace TestApplication
 {
     class Program
     {

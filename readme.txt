@@ -1,9 +1,0 @@
-Say Hello To "The Local Web Service"
-
-The project is designed to provide the framework and base classes required to set-up a child AppDomain in order to dynamically load and unload code. The child AppDomain will not require the OS to lock the dynamically loaded assembly, which allows replacing the assembly during execution and reloading at will.
-
-Note: When build configuration is set to DEBUG, it is not possible to replace the dynamically loaded assembly in order to allow loading the pdbs and allow step through debugging.
-
-The project contains three assemblies. The main assembly is the AppDomainService project. This is the assembly you will include in your project. It contains the base classes that make the AppDomain communication possible. The AppDomainProxy is the client side object. It holds a reference the Portal which gets requested from a ICommunicationProtocol. I've provided two implementations for ICommunicationProtocol. One which loads the dynamic assembly into a child AppDomain, and one that loads it in the current AppDomain. Implementation used is specified in the config file (eg. <add key="AppDomainIsolationLevel" value="CurrentAppDomain" />), but by default it uses the IsolatedAppDomain setting which loads the assembly into the child AppDomain. The AppDomainPortal is the server/AppDomain object. Because the AppDomainPortal is initialized in memory in the child AppDomain, in order for the main AppDomain to hold a reference to it, it must inherit from MarshalByObjRef.
-
-The other two assemblies are for demonstration purposes. The MyTestApplication contains the interface (IStringOperation) implemented by the third assembly, DynamicallyLoadedAssembly. It also shows how to implement the base classes in AppDomainService. The DynamicallyLoadedAssembly, when built, outputs it assembly to the c:\temp\hotswap directory where is loaded by MyTestApplication. MyTestApplication's config file specifies this location.

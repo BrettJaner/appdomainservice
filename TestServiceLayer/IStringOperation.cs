@@ -1,4 +1,4 @@
-﻿namespace MyTestApplication
+﻿namespace TestServiceLayer
 {
     public interface IStringOperation
     {

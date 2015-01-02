@@ -37,6 +37,30 @@ namespace AppDomainService
             return InitializeChannelFactory();
         }
 
+        private void StartUpServiceIfDown()
+        {
+            AppDomainsByTypes.GetOrAdd(GetType(), type =>
+            {
+                var domain = AppDomain.CreateDomain(Guid.NewGuid().ToString(),
+                    AppDomain.CurrentDomain.Evidence,
+                    new AppDomainSetup
+                    {
+                        ShadowCopyDirectories = _plugInPath,
+                        ShadowCopyFiles = "true",
+                    });
+
+                domain.UnhandledException += AppDomain_UnhandledException;
+                domain.SetThreadPrincipal(Thread.CurrentPrincipal);
+
+                var host = (AppDomainPortal<TContract, TService>)domain.CreateInstanceAndUnwrap(AppDomainPortalType.Assembly.FullName, AppDomainPortalType.FullName);
+                host.LoadFrom(_plugInPath);
+
+                host.Start();
+
+                return domain;
+            });
+        }
+
         protected virtual ChannelFactory<TContract> InitializeChannelFactory()
         {
             return new ChannelFactory<TContract>(
@@ -60,30 +84,6 @@ namespace AppDomainService
                         Mode = NetNamedPipeSecurityMode.None
                     }
                 }, new EndpointAddress(string.Format("net.pipe://localhost/{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName)));
-        }
-
-        private void StartUpServiceIfDown()
-        {
-            AppDomainsByTypes.GetOrAdd(GetType(), type =>
-            {
-                var domain = AppDomain.CreateDomain(Guid.NewGuid().ToString(),
-                    AppDomain.CurrentDomain.Evidence,
-                    new AppDomainSetup
-                    {
-                        ShadowCopyDirectories = _plugInPath,
-                        ShadowCopyFiles = "true",
-                    });
-
-                domain.UnhandledException += AppDomain_UnhandledException;
-                domain.SetThreadPrincipal(Thread.CurrentPrincipal);
-
-                var host = (AppDomainPortal<TContract, TService>)domain.CreateInstanceAndUnwrap(AppDomainPortalType.Assembly.FullName, AppDomainPortalType.FullName);
-                host.LoadFrom(_plugInPath);
-
-                host.Start();
-
-                return domain;
-            });
         }
 
         private static void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs args)
