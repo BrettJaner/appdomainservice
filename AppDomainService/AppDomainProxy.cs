@@ -9,11 +9,9 @@ namespace AppDomainService
     public class AppDomainProxy<TContract, TService>
         where TService : TContract
     {
-        private static readonly ConcurrentDictionary<Type, AppDomain> AppDomainsByTypes = new ConcurrentDictionary<Type, AppDomain>();
+        private static readonly ConcurrentDictionary<Type, AppDomain> AppDomainsByProxies = new ConcurrentDictionary<Type, AppDomain>();
 
         private readonly string _plugInPath;
-
-        protected virtual Type AppDomainPortalType { get { return typeof(AppDomainPortal<TContract, TService>); } }
 
         public AppDomainProxy() { }
 
@@ -26,7 +24,7 @@ namespace AppDomainService
         {
             AppDomain domain;
 
-            if (AppDomainsByTypes.TryRemove(GetType(), out domain))
+            if (AppDomainsByProxies.TryRemove(GetType(), out domain))
                 AppDomain.Unload(domain);
         }
 
@@ -39,7 +37,7 @@ namespace AppDomainService
 
         private void StartUpServiceIfDown()
         {
-            AppDomainsByTypes.GetOrAdd(GetType(), type =>
+            AppDomainsByProxies.GetOrAdd(GetType(), type =>
             {
                 var domain = AppDomain.CreateDomain(Guid.NewGuid().ToString(),
                     AppDomain.CurrentDomain.Evidence,
@@ -52,7 +50,7 @@ namespace AppDomainService
                 domain.UnhandledException += AppDomain_UnhandledException;
                 domain.SetThreadPrincipal(Thread.CurrentPrincipal);
 
-                var host = (AppDomainPortal<TContract, TService>)domain.CreateInstanceAndUnwrap(AppDomainPortalType.Assembly.FullName, AppDomainPortalType.FullName);
+                var host = (AppDomainPortal<TContract, TService>)domain.CreateInstanceAndUnwrap(typeof(AppDomainPortal<TContract, TService>).Assembly.FullName, typeof(AppDomainPortal<TContract, TService>).FullName);
                 host.LoadFrom(_plugInPath);
 
                 host.Start();
@@ -61,29 +59,38 @@ namespace AppDomainService
             });
         }
 
-        protected virtual ChannelFactory<TContract> InitializeChannelFactory()
+        private ChannelFactory<TContract> InitializeChannelFactory()
         {
-            return new ChannelFactory<TContract>(
-                new NetNamedPipeBinding
+            return new ChannelFactory<TContract>(GetNamedPipeBinding(), new EndpointAddress(string.Format("net.pipe://localhost/{0}", GetEndPointAddress())));
+        }
+
+        protected virtual NetNamedPipeBinding GetNamedPipeBinding()
+        {
+            return new NetNamedPipeBinding
+            {
+                ReceiveTimeout = TimeSpan.FromMinutes(10),
+                SendTimeout = TimeSpan.FromMinutes(10),
+                MaxBufferSize = int.MaxValue,
+                MaxBufferPoolSize = int.MaxValue,
+                MaxReceivedMessageSize = int.MaxValue,
+                ReaderQuotas = new XmlDictionaryReaderQuotas
                 {
-                    ReceiveTimeout = TimeSpan.FromMinutes(10),
-                    SendTimeout = TimeSpan.FromMinutes(10),
-                    MaxBufferSize = int.MaxValue,
-                    MaxBufferPoolSize = int.MaxValue,
-                    MaxReceivedMessageSize = int.MaxValue,
-                    ReaderQuotas = new XmlDictionaryReaderQuotas
-                    {
-                        MaxDepth = int.MaxValue,
-                        MaxStringContentLength = int.MaxValue,
-                        MaxArrayLength = int.MaxValue,
-                        MaxBytesPerRead = int.MaxValue,
-                        MaxNameTableCharCount = int.MaxValue
-                    },
-                    Security = new NetNamedPipeSecurity
-                    {
-                        Mode = NetNamedPipeSecurityMode.None
-                    }
-                }, new EndpointAddress(string.Format("net.pipe://localhost/{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName)));
+                    MaxDepth = int.MaxValue,
+                    MaxStringContentLength = int.MaxValue,
+                    MaxArrayLength = int.MaxValue,
+                    MaxBytesPerRead = int.MaxValue,
+                    MaxNameTableCharCount = int.MaxValue
+                },
+                Security = new NetNamedPipeSecurity
+                {
+                    Mode = NetNamedPipeSecurityMode.None
+                }
+            };
+        }
+
+        protected virtual string GetEndPointAddress()
+        {
+            return string.Format("{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName);
         }
 
         private static void AppDomain_UnhandledException(object sender, UnhandledExceptionEventArgs args)

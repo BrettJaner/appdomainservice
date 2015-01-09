@@ -46,41 +46,54 @@ namespace AppDomainService
             }
         }
 
-        protected virtual ServiceHost GetServiceHost()
+        private ServiceHost GetServiceHost()
         {
             var host = new ServiceHost(typeof(TService), new Uri("net.pipe://localhost"));
 
-            host.AddServiceEndpoint(typeof(TContract),
-                new NetNamedPipeBinding
-                {
-                    ReceiveTimeout = TimeSpan.FromMinutes(10),
-                    SendTimeout = TimeSpan.FromMinutes(10),
-                    MaxBufferSize = int.MaxValue,
-                    MaxBufferPoolSize = int.MaxValue,
-                    MaxReceivedMessageSize = int.MaxValue,
-                    ReaderQuotas = new XmlDictionaryReaderQuotas
-                    {
-                        MaxDepth = int.MaxValue,
-                        MaxStringContentLength = int.MaxValue,
-                        MaxArrayLength = int.MaxValue,
-                        MaxBytesPerRead = int.MaxValue,
-                        MaxNameTableCharCount = int.MaxValue
-                    },
-                    Security = new NetNamedPipeSecurity
-                    {
-                        Mode = NetNamedPipeSecurityMode.None
-                    }
-                },
-                string.Format("{0}_{1}", typeof(TContract).FullName, typeof(TService).FullName));
+            host.AddServiceEndpoint(typeof(TContract), GetNamedPipeBinding(), GetEndPointAddress());
 
-            var debugBehavior = host.Description.Behaviors.OfType<ServiceDebugBehavior>().SingleOrDefault();
+            ConfigureServiceHost(host);
+
+            return host;
+        }
+
+        protected virtual NetNamedPipeBinding GetNamedPipeBinding()
+        {
+            return new NetNamedPipeBinding
+            {
+                ReceiveTimeout = TimeSpan.FromMinutes(10),
+                SendTimeout = TimeSpan.FromMinutes(10),
+                MaxBufferSize = int.MaxValue,
+                MaxBufferPoolSize = int.MaxValue,
+                MaxReceivedMessageSize = int.MaxValue,
+                ReaderQuotas = new XmlDictionaryReaderQuotas
+                {
+                    MaxDepth = int.MaxValue,
+                    MaxStringContentLength = int.MaxValue,
+                    MaxArrayLength = int.MaxValue,
+                    MaxBytesPerRead = int.MaxValue,
+                    MaxNameTableCharCount = int.MaxValue
+                },
+                Security = new NetNamedPipeSecurity
+                {
+                    Mode = NetNamedPipeSecurityMode.None
+                }
+            };
+        }
+
+        protected virtual string GetEndPointAddress()
+        {
+            return string.Format("{0}_{1}", typeof (TContract).FullName, typeof (TService).FullName);
+        }
+
+        protected virtual void ConfigureServiceHost(ServiceHost serviceHost)
+        {
+            var debugBehavior = serviceHost.Description.Behaviors.OfType<ServiceDebugBehavior>().SingleOrDefault();
 
             if (debugBehavior != null)
                 debugBehavior.IncludeExceptionDetailInFaults = true;
             else
-                host.Description.Behaviors.Add(new ServiceDebugBehavior { IncludeExceptionDetailInFaults = true });
-
-            return host;
+                serviceHost.Description.Behaviors.Add(new ServiceDebugBehavior { IncludeExceptionDetailInFaults = true });
         }
 
         private static void AppDomain_OnDomainUnload(object sender, EventArgs args)
